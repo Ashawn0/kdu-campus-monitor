@@ -2,7 +2,7 @@
 
 ![Status](https://img.shields.io/badge/Status-🚧%20In%20Progress-yellow)
 ![Platform](https://img.shields.io/badge/Platform-ESP32%20%2B%20Flutter-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Apache%202.0-green)
 
 Real-time indoor environmental quality monitoring system for KDU Global university classrooms. An ESP32 reads five environmental sensors and broadcasts live data to an Android app over BLE.
 
