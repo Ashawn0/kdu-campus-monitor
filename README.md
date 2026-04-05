@@ -73,7 +73,7 @@ Real-time indoor environmental quality monitoring system for KDU Global universi
 
 ## Hardware Setup
 
-![Hardware Setup](docs/hardware_setup.jpg)
+![Hardware Setup](docs/hardware_setup.png)
 
 ---
 
