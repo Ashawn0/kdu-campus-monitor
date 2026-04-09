@@ -5,23 +5,21 @@
 ![Platform](https://img.shields.io/badge/Platform-ESP32%20%2B%20Flutter%20%2B%20Firebase-orange)
 ![License](https://img.shields.io/badge/License-Apache%202.0-green)
 
-> **IoT Edge-to-Cloud Environmental Monitoring System**
-> 
-> Real-time indoor environmental quality monitoring system for KDU Global university classrooms. An ESP32 edge node reads five environmental sensors, broadcasts live data to an Android app over BLE (Bluetooth Low Energy), and syncs all readings to Firebase Realtime Database for cloud-side analysis and logging. Built as part of the **EcoSense** GURP (Graduate Undergraduate Research Programme) project.
+An ongoing exploration into low-cost IoT edge computing for real-time indoor environmental quality monitoring in university classroom contexts. An ESP32 edge node reads five environmental sensors and broadcasts live data to an Android application over BLE; the app re-publishes every reading to Firebase Realtime Database for cloud-side logging and future analysis. This emerging exploration in edge-to-cloud architecture forms the empirical foundation of the **EcoSense** GURP (Graduate Undergraduate Research Programme) research project at KDU Global.
 
 ---
 
-## Project Status: 95% Complete ✅
+## Project Status: 95% Complete
 
-The full edge-to-cloud data pipeline is operational. The ESP32 firmware streams a JSON sensor payload every 2 seconds via BLE GATT. The Flutter Android application scans, connects, parses the payload, renders a live dashboard, and uploads every reading to Firebase Realtime Database. The system has been validated end-to-end on physical hardware.
+The full edge-to-cloud data pipeline is operational and validated on physical hardware. The ESP32 firmware streams a structured JSON sensor payload every 2 seconds via BLE GATT notification. The Flutter Android application scans, connects, parses the payload, renders a live dashboard, and uploads each reading to Firebase Realtime Database.
 
 | Component | Status |
 |-----------|--------|
 | ESP32 BLE GATT firmware | ✅ Operational |
-| Flutter BLE scanner & dashboard | ✅ Operational |
+| Flutter BLE scanner & live dashboard | ✅ Operational |
 | Firebase Realtime Database sync | ✅ Operational |
-| BH1750 light sensor integration | ⏳ Pending (solder fix) |
-| GURP data collection phase | ⏳ Pending |
+| BH1750 light sensor integration | ⏳ Pending — solder fix required |
+| GURP structured data collection | ⏳ Pending |
 
 ---
 
@@ -74,84 +72,64 @@ The full edge-to-cloud data pipeline is operational. The ESP32 firmware streams 
 
 ---
 
-## Hardware Setup
+## System Documentation
 
-![Hardware Setup](docs/hardware_setup.png)
+### Hardware Setup
 
-*ESP32 WROOM-32D wired on MB-102 breadboard with DHT22, MQ-135, DFR0034 sound sensor, and MH-Z19C CO₂ sensor.*
+<img src="docs/hardware_setup.png" alt="ESP32 sensor wiring on breadboard" width="250">
 
----
+*ESP32 WROOM-32D wired on an MB-102 breadboard with all active sensors prior to BLE firmware deployment.*
 
-## Serial Monitor Output
+<img src="docs/serial_monitor.png" alt="Arduino IDE Serial Monitor output" width="250">
 
-![Serial Monitor](docs/serial_monitor.png)
-
-*Arduino IDE Serial Monitor confirming all sensors polling correctly before BLE integration.*
+*Arduino IDE Serial Monitor confirming all sensors polling correctly, showing the raw JSON output before BLE integration.*
 
 ---
 
-## Live System — App & Cloud Screenshots
+### Mobile Gateway
 
-### Flutter App — BLE Scanner
+<img src="Photos/SearchingOnAppStart.jpg" alt="Flutter BLE Scanner on app start" width="250">
 
-![BLE Scanner on App Start](Photos/SearchingOnAppStart.jpg)
+*Flutter application on launch, performing an active BLE scan for the `KDU-Monitor` edge node.*
 
-*The KDU Campus Monitor Flutter app on startup, actively scanning for the ESP32 BLE edge node (`KDU-Monitor`) over Bluetooth Low Energy.*
+<img src="Photos/MonitorFoundAndConnectOptionShown.jpg" alt="Edge node discovered with Connect option" width="250">
 
----
+*The target `KDU-Monitor` peripheral is discovered and presented alongside other nearby Bluetooth devices, with a highlighted Connect button.*
 
-### Flutter App — Edge Node Discovered
+<img src="Photos/LiveReadingPlusPacketUpload.jpg" alt="Live dashboard with Firebase upload counter" width="250">
 
-![Edge Node Discovered](Photos/MonitorFoundAndConnectOptionShown.jpg)
+*Real-time sensor dashboard showing live readings from the ESP32. The Firebase sync counter reflects packets successfully uploaded to the cloud.*
 
-*The `KDU-Monitor` BLE peripheral detected and listed with a highlighted Connect button. The app distinguishes the target node from other nearby Bluetooth devices.*
+<img src="Photos/Screenshot_20260409_141522.jpg" alt="Edge Health Score composite indicator" width="250">
 
----
-
-### Flutter App — Live Edge Dashboard
-
-![Live Dashboard with Packet Upload](Photos/LiveReadingPlusPacketUpload.jpg)
-
-*The real-time dashboard displaying live sensor readings streamed from the ESP32. The Firebase sync counter confirms packets are being uploaded to the cloud every 2 seconds.*
+*The composite Edge Health Score, derived from the aggregation of all sensor values, provides a single-value indicator of classroom environmental quality.*
 
 ---
 
-### Flutter App — Edge Health Score
+### Cloud Integration
 
-![Edge Health Score Dashboard](Photos/Screenshot_20260409_141522.jpg)
+<img src="Photos/FireBaseRealTimeReading.png" alt="Firebase RTDB live data view" width="250">
 
-*The composite Edge Health Score calculated from all sensor values (temperature, humidity, CO₂, air quality, and sound level), providing a single-value classroom environment quality indicator.*
+*Firebase Realtime Database console receiving live sensor data. Each node represents a timestamped JSON record pushed on every BLE notification.*
 
----
+<img src="Photos/FireBaseRealTimeReadingExpanded.png" alt="Firebase RTDB expanded JSON record" width="250">
 
-### Firebase Realtime Database — Live Sync
-
-![Firebase RTDB Live Sync](Photos/FireBaseRealTimeReading.png)
-
-*Firebase Realtime Database console showing live sensor data arriving from the edge node. Each entry is a timestamped JSON record pushed by the Flutter app upon receiving a BLE notification.*
-
----
-
-### Firebase Realtime Database — Expanded Record
-
-![Firebase RTDB Expanded Record](Photos/FireBaseRealTimeReadingExpanded.png)
-
-*An expanded RTDB record showing the full sensor payload structure: temperature, humidity, CO₂ (ppm), air quality (raw ADC), sound level, health score, and server-side timestamp.*
+*An expanded RTDB record showing the full sensor payload: temperature, humidity, CO₂ (ppm), air quality (raw ADC), sound level, health score, and server-side timestamp.*
 
 ---
 
 ## Progress
 
-- [x] Hardware wiring and sensor testing
-- [x] Combined firmware (all sensors reading, Serial output)
+- [x] Hardware wiring and sensor validation
+- [x] Combined sensor firmware (Serial JSON output)
 - [x] BLE GATT server firmware
-- [x] Flutter BLE scanner & dashboard app
-- [x] Flutter app tested and validated on physical Android device (Samsung S22)
-- [x] Firebase Realtime Database live sync operational
-- [x] MTU negotiation (512 bytes) for full JSON payload delivery
+- [x] Flutter BLE scanner and live dashboard
+- [x] End-to-end validation on physical Android device (Samsung S22)
+- [x] Firebase Realtime Database live sync
+- [x] BLE MTU negotiation (512 bytes) for full JSON payload delivery
 - [ ] BH1750 light sensor soldering fix
-- [ ] GURP research data collection phase
-- [ ] Benchmark analysis (edge vs. cloud processing latency)
+- [ ] GURP structured data collection phase
+- [ ] Edge vs. cloud latency benchmark analysis
 - [ ] Research paper submission (EcoSense — targeting TechRxiv)
 
 ---
@@ -159,10 +137,12 @@ The full edge-to-cloud data pipeline is operational. The ESP32 firmware streams 
 ## Next Steps / Pending Tasks
 
 ### Hardware
-- **Light sensor soldering:** The BH1750 I²C light sensor is wired but not yet soldered to a stable connection. Once soldered, the `light` and `light_stat` fields in the JSON payload will report live lux values instead of `"Not Detected"`.
 
-### Research (GURP)
-- **Data collection:** With the full edge-to-cloud pipeline now operational, the next phase is structured data collection across multiple KDU Global classroom environments during active class sessions. This data will underpin the EcoSense research analysis on indoor environmental quality and its correlation with academic performance.
+**Light sensor soldering** — The BH1750 I²C light sensor is mounted but requires re-soldering for a stable electrical connection. Once resolved, the `light` and `light_stat` payload fields will report live lux values in place of the current `"Not Detected"` placeholder.
+
+### Research (GURP — EcoSense)
+
+**Structured data collection** — With the complete edge-to-cloud pipeline operational, the project advances to the systematic data collection phase. Sensor readings will be captured across multiple KDU Global classroom environments during scheduled class sessions. This dataset will underpin the EcoSense analysis of indoor environmental quality and its potential correlation with student performance and concentration.
 
 ---
 
@@ -181,7 +161,7 @@ kdu-campus-monitor/
 │   └── android/
 │       └── app/
 │           └── google-services.json
-├── Photos/                       # Live system screenshots
+├── Photos/                       # Live system documentation
 ├── docs/
 │   ├── hardware_setup.png
 │   └── serial_monitor.png
@@ -202,5 +182,5 @@ kdu-campus-monitor/
 
 ---
 
-*Solo project — Gyawali Aabhushan, KDU Global, Smart Computing F22*  
+*Gyawali Aabhushan — KDU Global, Smart Computing F22*  
 *GURP Research Project: EcoSense — Indoor Environmental Quality Monitoring*

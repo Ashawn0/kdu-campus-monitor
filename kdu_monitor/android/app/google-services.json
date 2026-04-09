@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "367236351405",
+    "firebase_url": "https://ecosense-c2fc3-default-rtdb.firebaseio.com",
+    "project_id": "ecosense-c2fc3",
+    "storage_bucket": "ecosense-c2fc3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:367236351405:android:b0622c203bd53d8dcdcd24",
+        "android_client_info": {
+          "package_name": "com.example.kdu_monitor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGVN-3uMMIrYYwHSfcUPNBqIpYd64E004"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
