@@ -1,186 +1,186 @@
-# KDU Campus Monitor
+# EcoSense — KDU Campus Monitor
 
-![Status](https://img.shields.io/badge/Status-🟢%20Edge--to--Cloud%20Live-brightgreen)
-![Completion](https://img.shields.io/badge/Completion-95%25-blue)
-![Platform](https://img.shields.io/badge/Platform-ESP32%20%2B%20Flutter%20%2B%20Firebase-orange)
-![License](https://img.shields.io/badge/License-Apache%202.0-green)
+> Real-time Indoor Air Quality monitoring system with Edge vs Cloud computation latency analysis. Built for KDU Global university campus environments.
 
-An ongoing exploration into low-cost IoT edge computing for real-time indoor environmental quality monitoring in university classroom contexts. An ESP32 edge node reads five environmental sensors and broadcasts live data to an Android application over BLE; the app re-publishes every reading to Firebase Realtime Database for cloud-side logging and future analysis. This emerging exploration in edge-to-cloud architecture forms the empirical foundation of the **EcoSense** GURP (Graduate Undergraduate Research Programme) research project at KDU Global.
+## 🔬 Research
 
----
+**Title:** EcoSense: Edge vs. Cloud Computation Placement for Real-Time IAQ Monitoring in University Campus Environments — A Pipeline Latency Analysis
 
-## Project Status: 95% Complete
+**Research Question:** Does local edge processing produce lower end-to-end pipeline latency than cloud offloading for real-time IAQ monitoring under real-world campus network conditions?
 
-The full edge-to-cloud data pipeline is operational and validated on physical hardware. The ESP32 firmware streams a structured JSON sensor payload every 2 seconds via BLE GATT notification. The Flutter Android application scans, connects, parses the payload, renders a live dashboard, and uploads each reading to Firebase Realtime Database.
+**Key Findings (Preliminary):**
+- Edge processing: ~728–740 μs (ESP32 computation + serialization)
+- Cloud processing: ~11 ms (Firebase Cloud Function)
+- ESP32 serialization only (cloud mode): ~566 μs
+- Serialization dominates over computation (~160 μs delta)
 
-| Component | Status |
-|-----------|--------|
-| ESP32 BLE GATT firmware | ✅ Operational |
-| Flutter BLE scanner & live dashboard | ✅ Operational |
-| Firebase Realtime Database sync | ✅ Operational |
-| BH1750 light sensor integration | ⏳ Pending — solder fix required |
-| GURP structured data collection | ⏳ Pending |
-
----
-
-## Architecture
+## 🏗️ Architecture
 
 ```
-┌────────────────────┐       BLE GATT        ┌──────────────────────────┐
-│   ESP32 WROOM-32D  │ ─────────────────────▶│   Flutter Android App    │
-│                    │   JSON every 2s         │   (flutter_blue_plus)    │
-│  DHT22   MQ-135    │                        └──────────┬───────────────┘
-│  DFR0034 MH-Z19C   │                                   │  firebase_database
-│  BH1750 (pending)  │                                   ▼
-└────────────────────┘                        ┌──────────────────────────┐
-                                              │  Firebase Realtime DB    │
-                                              │  ecosense-c2fc3-rtdb     │
-                                              └──────────────────────────┘
+ESP32 (sensors)
+↓ BLE
+Flutter App (gateway)
+↓ WiFi
+Firebase RTDB
+↓ trigger
+Cloud Function (IAQ calculation)
+↓ write-back
+Flutter App (display)
 ```
 
----
+**Edge Mode:** ESP32 calculates IAQ score → sends heavy JSON → Flutter displays immediately
 
-## Hardware
+**Cloud Mode:** ESP32 sends raw data → Flutter pushes to Firebase → Cloud Function calculates → writes back → Flutter updates
 
-| Sensor | Parameter | Interface | GPIO | Status |
-|--------|-----------|-----------|------|--------|
-| DHT22 | Temperature + Humidity | Digital | GPIO26 | ✅ Working |
-| MQ-135 | Air Quality (VOC / CO) | ADC | GPIO32 | ✅ Working |
-| DFR0034 | Sound Level | ADC | GPIO33 | ✅ Working |
-| MH-Z19C | CO₂ (NDIR) | UART | TX:14 / RX:12 | ✅ Working |
-| BH1750 | Light Intensity | I2C | SDA:27 / SCL:25 | ⏳ Pending (solder fix) |
+## 🛠️ Hardware
 
-**Microcontroller:** ESP32 WROOM-32D V4  
-**Power:** USB (5V via USB-C)
+| Sensor | Parameter | GPIO | Status |
+|--------|-----------|------|--------|
+| DHT22 | Temperature + Humidity | GPIO26 | ✅ Working |
+| MH-Z19C | CO₂ (NDIR) | TX=GPIO14, RX=GPIO13 | ✅ Working |
+| MQ-135 | Air Quality (VOC indicator) | GPIO32 | ✅ Working |
+| DFR0034 | Sound (occupancy proxy) | GPIO33 | ✅ Working |
 
----
+**Board:** ESP32 WROOM-32D V4 on MB-102 breadboard
+**Flash settings:** Huge APP partition, DIO mode, 40 MHz
 
-## BLE Configuration
+## 📱 Screenshots
 
-| Field | Value |
-|-------|-------|
-| Device name | `KDU-Monitor` |
-| Service UUID | `4fafc201-1fb5-459e-8fcc-c5c9c331914b` |
-| Characteristic UUID | `beb5483e-36e1-4688-b7f5-ea07361b26a8` |
-| Payload format | JSON string, notify every 2 seconds |
-| BLE MTU | 512 bytes (negotiated on connect) |
+<div align="center">
 
-**Example payload:**
-```json
-{"temp":23.00,"hum":61.20,"air":111,"sound":400,"co2":1588,"light":0,"light_stat":"Not Detected","health_score":72}
-```
+<img src="docs/images/hardware_setup.jpg" width="400" alt="ESP32 hardware setup on breadboard with DHT22, MH-Z19C, MQ-135, and sound sensor"/>
+
+*Hardware setup — ESP32 WROOM-32D on MB-102 breadboard with all four sensors*
 
 ---
 
-## System Documentation
+<img src="docs/images/edge_mode_dashboard.jpg" width="320" alt="Edge mode dashboard showing Mode: EDGE, Firebase 60 uploaded, WAL Cache 0 pending, Latency 728μs, CO2 1001 ppm, IAQ Moving Avg 1002.2, IAQ Score 1001.0"/>
 
-### Hardware Setup
-
-<img src="docs/hardware_setup.png" alt="ESP32 sensor wiring on breadboard" width="250">
-
-*ESP32 WROOM-32D wired on an MB-102 breadboard with all active sensors prior to BLE firmware deployment.*
-
-<img src="docs/serial_monitor.png" alt="Arduino IDE Serial Monitor output" width="250">
-
-*Arduino IDE Serial Monitor confirming all sensors polling correctly, showing the raw JSON output before BLE integration.*
+*Edge mode dashboard — full pipeline active. Latency badge shows **728 μs** end-to-end.*
 
 ---
 
-### Mobile Gateway
+<img src="docs/images/cloud_mode_dashboard.jpg" width="320" alt="Cloud mode dashboard showing Mode: CLOUD, Firebase 46 uploaded, WAL Cache 0 pending, Latency 593μs"/>
 
-<img src="Photos/SearchingOnAppStart.jpg" alt="Flutter BLE Scanner on app start" width="250">
-
-*Flutter application on launch, performing an active BLE scan for the `KDU-Monitor` edge node.*
-
-<img src="Photos/MonitorFoundAndConnectOptionShown.jpg" alt="Edge node discovered with Connect option" width="250">
-
-*The target `KDU-Monitor` peripheral is discovered and presented alongside other nearby Bluetooth devices, with a highlighted Connect button.*
-
-<img src="Photos/LiveReadingPlusPacketUpload.jpg" alt="Live dashboard with Firebase upload counter" width="250">
-
-*Real-time sensor dashboard showing live readings from the ESP32. The Firebase sync counter reflects packets successfully uploaded to the cloud.*
-
-<img src="Photos/Screenshot_20260409_141522.jpg" alt="Edge Health Score composite indicator" width="250">
-
-*The composite Edge Health Score, derived from the aggregation of all sensor values, provides a single-value indicator of classroom environmental quality.*
+*Cloud mode dashboard — 46 records uploaded to Firebase RTDB. Latency badge: **593 μs** (BLE receive → Firebase push, excluding Cloud Function round-trip).*
 
 ---
 
-### Cloud Integration
+<img src="docs/images/edge_mode_processing.jpg" width="320" alt="Edge mode close-up showing IAQ Moving Avg CO2 1000.8, IAQ Score 999.5, Edge Processing Time 740μs"/>
 
-<img src="Photos/FireBaseRealTimeReading.png" alt="Firebase RTDB live data view" width="250">
-
-*Firebase Realtime Database console receiving live sensor data. Each node represents a timestamped JSON record pushed on every BLE notification.*
-
-<img src="Photos/FireBaseRealTimeReadingExpanded.png" alt="Firebase RTDB expanded JSON record" width="250">
-
-*An expanded RTDB record showing the full sensor payload: temperature, humidity, CO₂ (ppm), air quality (raw ADC), sound level, health score, and server-side timestamp.*
+*Edge mode — IAQ Moving Avg CO₂: 1000.8 ppm, IAQ Score: 999.5, Edge Processing Time: **740 μs***
 
 ---
 
-## Progress
+<img src="docs/images/cloud_mode_serialization.jpg" width="320" alt="Cloud mode showing ESP32 Serialization Time 566μs, CO2 1007 ppm, Awaiting Cloud result"/>
 
-- [x] Hardware wiring and sensor validation
-- [x] Combined sensor firmware (Serial JSON output)
-- [x] BLE GATT server firmware
-- [x] Flutter BLE scanner and live dashboard
-- [x] End-to-end validation on physical Android device (Samsung S22)
-- [x] Firebase Realtime Database live sync
-- [x] BLE MTU negotiation (512 bytes) for full JSON payload delivery
-- [ ] BH1750 light sensor soldering fix
-- [ ] GURP structured data collection phase
-- [ ] Edge vs. cloud latency benchmark analysis
-- [ ] Research paper submission (EcoSense — targeting TechRxiv)
+*Cloud mode — ESP32 Serialization Time: **566 μs** (no IAQ computation on device). Cloud Function result pending.*
 
----
+</div>
 
-## Next Steps / Pending Tasks
+## 📊 Data Pipeline
 
-### Hardware
+Every packet logged to Firebase contains:
 
-**Light sensor soldering** — The BH1750 I²C light sensor is mounted but requires re-soldering for a stable electrical connection. Once resolved, the `light` and `light_stat` payload fields will report live lux values in place of the current `"Not Detected"` placeholder.
+**From ESP32:**
+- `node_id`, `packet_count`, `node_tick_ms`, `mode`
+- `temp`, `hum`, `co2`, `air`, `sound`
+- `sensor_status` (per sensor OK/ERROR)
+- `esp32_processing_us` (computational penalty measurement)
+- Edge mode only: `iaq_moving_avg`, `iaq_score`, `alert`, `buffer_ready`
 
-### Research (GURP — EcoSense)
+**Added by Flutter gateway:**
+- `gateway_receive_time` (ms epoch, captured first — before any parsing)
+- `cloud_sync_time` (Firebase ServerValue.timestamp)
+- `session_location`, `network_type`, `time_of_day`
 
-**Structured data collection** — With the complete edge-to-cloud pipeline operational, the project advances to the systematic data collection phase. Sensor readings will be captured across multiple KDU Global classroom environments during scheduled class sessions. This dataset will underpin the EcoSense analysis of indoor environmental quality and its potential correlation with student performance and concentration.
+**Written back by Cloud Function (cloud mode only):**
+- `cloud_iaq_score`, `cloud_iaq_moving_avg`, `cloud_alert`
+- `cloud_processing_ms`, `function_completed_at`
 
----
+## 🧪 Methodology
 
-## Repo Structure
+**A/B Test:** MODE_ACK handshake prevents dataset contamination during mode switching. App drops all packets for 3 seconds or until ESP32 acknowledges mode change.
+
+**Timing:** `esp32_processing_us` wraps the entire payload build including `serializeJson()` — measures true computational penalty of edge vs. cloud path.
+
+**Offline resilience:** SQLite WAL caches failed Firebase pushes, flushes on reconnect.
+
+## 📁 Project Structure
 
 ```
 kdu-campus-monitor/
 ├── firmware/
-│   ├── combined_sensor/
-│   │   └── combined_sensor.ino   # All sensors, Serial JSON output
-│   └── ble_gatt_server/
-│       └── ble_gatt_server.ino   # BLE GATT server, notifies Flutter app
-├── kdu_monitor/                  # Flutter Android application
-│   ├── lib/
-│   │   └── main.dart             # ScanPage + DashboardPage + Firebase sync
-│   └── android/
-│       └── app/
-│           └── google-services.json
-├── Photos/                       # Live system documentation
+│   └── ecosense_final/
+│       └── ecosense_final.ino
+├── kdu_monitor/          ← Flutter app
+│   └── lib/
+│       └── main.dart
+├── functions/            ← Firebase Cloud Function
+│   ├── index.js
+│   └── package.json
 ├── docs/
-│   ├── hardware_setup.png
-│   └── serial_monitor.png
+│   └── images/           ← screenshots
 └── README.md
 ```
 
+## 🚀 Setup
+
+### ESP32 Firmware
+1. Open `firmware/ecosense_final/ecosense_final.ino` in Arduino IDE
+2. Board: ESP32 Dev Module
+3. Partition: Huge APP (3 MB No OTA / 1 MB SPIFFS)
+4. Flash Mode: DIO, Frequency: 40 MHz
+5. Hold BOOT button when "Connecting..." appears
+
+### Flutter App
+```bash
+cd kdu_monitor
+flutter pub get
+flutter run
+```
+> Note: Requires `google-services.json` (not included — configure your own Firebase project)
+
+### Cloud Function
+```bash
+firebase deploy --only functions
+```
+> Note: Requires Firebase Blaze plan
+
+## ⚠️ Limitations
+
+- Single ESP32 node (one location at a time)
+- MH-Z19C requires 60 s warmup after power-on
+- MQ-135 uncalibrated — raw analog indicator only
+- DHT22 ±0.5 °C accuracy propagates into IAQ score
+- Dataset small-scale — single university campus
+
+## 📋 Progress
+
+- [x] Hardware wiring and sensor testing
+- [x] Combined firmware with NVS fix
+- [x] BLE GATT server with Edge/Cloud modes
+- [x] Flutter BLE dashboard app
+- [x] Firebase sync with WAL resilience
+- [x] Firebase Cloud Function (IAQ calculation)
+- [x] End-to-end pipeline confirmed working
+- [ ] Formal data collection (in progress)
+- [ ] Research paper writing
+- [ ] TechRxiv/arXiv preprint submission
+
+## 👤 Author
+
+Gyawali Aabhushan | Student ID: 2217133
+Smart Computing F22 | KDU Global, Sokcho, South Korea
+GURP Supervisor: Prof. Mohammed A.A
+
 ---
 
-## Built With
-
-- [Arduino / ESP32 Arduino Core](https://github.com/espressif/arduino-esp32)
-- [DHT sensor library (Adafruit)](https://github.com/adafruit/DHT-sensor-library)
-- [MHZ19 library](https://github.com/strange-v/MHZ19)
-- [Flutter](https://flutter.dev)
-- [flutter_blue_plus 1.35.3](https://pub.dev/packages/flutter_blue_plus)
-- [Firebase Realtime Database](https://firebase.google.com/products/realtime-database)
-- [firebase_database (Flutter)](https://pub.dev/packages/firebase_database)
+*Solo project — all hardware, firmware, app, and research by one student.*
 
 ---
 
-*Gyawali Aabhushan — KDU Global, Smart Computing F22*  
-*GURP Research Project: EcoSense — Indoor Environmental Quality Monitoring*
+## 🔒 Security Note for Contributors
+
+This repository does not include API keys or Firebase credentials.
+You must provide your own `google-services.json` and configure your own Firebase project.

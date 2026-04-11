@@ -1,0 +1,42 @@
+# ── Firebase credentials — NEVER commit ──────────────────────────
+google-services.json
+GoogleService-Info.plist
+**/google-services.json
+**/GoogleService-Info.plist
+functions/.runtimeconfig.json
+service-account*.json
+*.env
+.env*
+
+# ── Firebase emulator / local config ─────────────────────────────
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# ── Node / Cloud Functions ────────────────────────────────────────
+functions/node_modules/
+node_modules/
+
+# ── Flutter / Dart build artifacts ───────────────────────────────
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.g.dart
+*.freezed.dart
+
+# ── IDE / OS artifacts ────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ── Claude Code session files ─────────────────────────────────────
+.claude/
+
+# ── Misc build logs ───────────────────────────────────────────────
+build_log.txt
+build_log_utf8.txt
+session5_message.txt
