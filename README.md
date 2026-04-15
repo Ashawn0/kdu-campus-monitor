@@ -1,186 +1,205 @@
-# EcoSense — KDU Campus Monitor
+# EcoSense: Edge vs. Cloud IAQ Monitoring
 
-> Real-time Indoor Air Quality monitoring system with Edge vs Cloud computation latency analysis. Built for KDU Global university campus environments.
+> Real-time Indoor Air Quality monitoring system comparing edge vs. cloud pipeline latency across university campus environments.
 
-## 🔬 Research
-
-**Title:** EcoSense: Edge vs. Cloud Computation Placement for Real-Time IAQ Monitoring in University Campus Environments — A Pipeline Latency Analysis
-
-**Research Question:** Does local edge processing produce lower end-to-end pipeline latency than cloud offloading for real-time IAQ monitoring under real-world campus network conditions?
-
-**Key Findings (Preliminary):**
-- Edge processing: ~728–740 μs (ESP32 computation + serialization)
-- Cloud processing: ~11 ms (Firebase Cloud Function)
-- ESP32 serialization only (cloud mode): ~566 μs
-- Serialization dominates over computation (~160 μs delta)
-
-## 🏗️ Architecture
-
-```
-ESP32 (sensors)
-↓ BLE
-Flutter App (gateway)
-↓ WiFi
-Firebase RTDB
-↓ trigger
-Cloud Function (IAQ calculation)
-↓ write-back
-Flutter App (display)
-```
-
-**Edge Mode:** ESP32 calculates IAQ score → sends heavy JSON → Flutter displays immediately
-
-**Cloud Mode:** ESP32 sends raw data → Flutter pushes to Firebase → Cloud Function calculates → writes back → Flutter updates
-
-## 🛠️ Hardware
-
-| Sensor | Parameter | GPIO | Status |
-|--------|-----------|------|--------|
-| DHT22 | Temperature + Humidity | GPIO26 | ✅ Working |
-| MH-Z19C | CO₂ (NDIR) | TX=GPIO14, RX=GPIO13 | ✅ Working |
-| MQ-135 | Air Quality (VOC indicator) | GPIO32 | ✅ Working |
-| DFR0034 | Sound (occupancy proxy) | GPIO33 | ✅ Working |
-
-**Board:** ESP32 WROOM-32D V4 on MB-102 breadboard
-**Flash settings:** Huge APP partition, DIO mode, 40 MHz
-
-## 📱 Screenshots
-
-<div align="center">
-
-<img src="docs/images/hardware_setup.jpg" width="400" alt="ESP32 hardware setup on breadboard with DHT22, MH-Z19C, MQ-135, and sound sensor"/>
-
-*Hardware setup — ESP32 WROOM-32D on MB-102 breadboard with all four sensors*
+[![Paper](https://img.shields.io/badge/Paper-LaTeX-blue)](paper/ecosense_paper.tex)
+[![Dataset](https://img.shields.io/badge/Dataset-Zenodo-blue)](https://doi.org/10.5281/zenodo.19563976)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform: ESP32](https://img.shields.io/badge/Platform-ESP32-orange)](firmware/ecosense_final/)
+[![Flutter](https://img.shields.io/badge/Built%20with-Flutter-blue)](kdu_monitor/)
 
 ---
 
-<img src="docs/images/edge_mode_dashboard.jpg" width="320" alt="Edge mode dashboard showing Mode: EDGE, Firebase 60 uploaded, WAL Cache 0 pending, Latency 728μs, CO2 1001 ppm, IAQ Moving Avg 1002.2, IAQ Score 1001.0"/>
+<details>
+<summary><strong>Abstract</strong></summary>
 
-*Edge mode dashboard — full pipeline active. Latency badge shows **728 μs** end-to-end.*
+CO2 concentrations in university classrooms routinely exceed thresholds associated with reduced cognitive performance, yet most institutional monitoring systems rely on cloud-dependent pipelines that assume reliable internet connectivity. This paper presents EcoSense, a deployed IAQ monitoring system built on an ESP32 WROOM-32D V4 with CO2, temperature, humidity, air quality, and sound sensors, connected via BLE to an Android application writing opportunistically to Firebase Realtime Database. Using a balanced A/B methodology across three real deployment locations in Sokcho, South Korea, we collected 5,317 readings and compared edge vs. cloud pipeline latency. Edge processing achieved a median of 715 μs (max 897 μs, 100% below 1 ms). Cloud pipeline: median 6 ms, P95 9 ms, max >400 ms. Mann-Whitney U=0, p≈0, Cliff's δ=1.0 — complete stochastic separation across all 5,317 measurements.
 
----
-
-<img src="docs/images/cloud_mode_dashboard.jpg" width="320" alt="Cloud mode dashboard showing Mode: CLOUD, Firebase 46 uploaded, WAL Cache 0 pending, Latency 593μs"/>
-
-*Cloud mode dashboard — 46 records uploaded to Firebase RTDB. Latency badge: **593 μs** (BLE receive → Firebase push, excluding Cloud Function round-trip).*
+</details>
 
 ---
 
-<img src="docs/images/edge_mode_processing.jpg" width="320" alt="Edge mode close-up showing IAQ Moving Avg CO2 1000.8, IAQ Score 999.5, Edge Processing Time 740μs"/>
+## Key Results
 
-*Edge mode — IAQ Moving Avg CO₂: 1000.8 ppm, IAQ Score: 999.5, Edge Processing Time: **740 μs***
+| Metric | Edge (ESP32) | Cloud (Firebase Fn) |
+|--------|-------------|---------------------|
+| Median latency | 715 μs | 6 ms |
+| Max latency | 897 μs | >400 ms |
+| P95 | <1 ms | 9 ms |
+| Std deviation | 26.1 μs | 19.8 ms |
+| n (readings) | 2,632 | 2,685 |
+| Mann-Whitney U | 0 | — |
+| Cliff's δ | 1.0 (large) | — |
+
+**Maximum edge latency (897 μs) < Minimum cloud latency (1 ms) — complete stochastic separation with zero overlap.**
 
 ---
 
-<img src="docs/images/cloud_mode_serialization.jpg" width="320" alt="Cloud mode showing ESP32 Serialization Time 566μs, CO2 1007 ppm, Awaiting Cloud result"/>
+## System Architecture
 
-*Cloud mode — ESP32 Serialization Time: **566 μs** (no IAQ computation on device). Cloud Function result pending.*
+<img src="assets/fig_architecture.png" width="800" alt="EcoSense system architecture"/>
 
-</div>
+*Full EcoSense pipeline: ESP32 → BLE → Flutter → Firebase → Cloud Function*
 
-## 📊 Data Pipeline
+---
 
-Every packet logged to Firebase contains:
+## A/B Methodology
 
-**From ESP32:**
-- `node_id`, `packet_count`, `node_tick_ms`, `mode`
-- `temp`, `hum`, `co2`, `air`, `sound`
-- `sensor_status` (per sensor OK/ERROR)
-- `esp32_processing_us` (computational penalty measurement)
-- Edge mode only: `iaq_moving_avg`, `iaq_score`, `alert`, `buffer_ready`
+<img src="assets/fig_methodology.png" width="700" alt="A/B methodology diagram"/>
 
-**Added by Flutter gateway:**
-- `gateway_receive_time` (ms epoch, captured first — before any parsing)
-- `cloud_sync_time` (Firebase ServerValue.timestamp)
-- `session_location`, `network_type`, `time_of_day`
+*Balanced A/B data collection: 30-min edge phase → 30-min cloud phase, separated by BLE MODE_ACK handshake*
 
-**Written back by Cloud Function (cloud mode only):**
-- `cloud_iaq_score`, `cloud_iaq_moving_avg`, `cloud_alert`
-- `cloud_processing_ms`, `function_completed_at`
+---
 
-## 🧪 Methodology
+## Hardware
 
-**A/B Test:** MODE_ACK handshake prevents dataset contamination during mode switching. App drops all packets for 3 seconds or until ESP32 acknowledges mode change.
+<table>
+<tr>
+<td><img src="assets/hw_full.jpg" width="340" alt="Full hardware setup"/></td>
+<td><img src="assets/hw_closeup.jpg" width="340" alt="Hardware closeup"/></td>
+</tr>
+<tr>
+<td align="center">Full setup</td>
+<td align="center">Sensor closeup</td>
+</tr>
+</table>
 
-**Timing:** `esp32_processing_us` wraps the entire payload build including `serializeJson()` — measures true computational penalty of edge vs. cloud path.
+**Components:**
+- ESP32 WROOM-32D V4 on MB-102 breadboard
+- MH-Z19C CO2 sensor (UART, GPIO14/13)
+- DHT22 temperature + humidity (GPIO26)
+- MQ-135 air quality analog (GPIO32)
+- DFR0034 sound level analog (GPIO33)
+- Power: wall charger (500mA combined draw)
 
-**Offline resilience:** SQLite WAL caches failed Firebase pushes, flushes on reconnect.
+---
 
-## 📁 Project Structure
+## Mobile Application
 
-```
-kdu-campus-monitor/
-├── firmware/
-│   └── ecosense_final/
-│       └── ecosense_final.ino
-├── kdu_monitor/          ← Flutter app
-│   └── lib/
-│       └── main.dart
-├── functions/            ← Firebase Cloud Function
-│   ├── index.js
-│   └── package.json
-├── docs/
-│   └── images/           ← screenshots
-└── README.md
-```
+<table>
+<tr>
+<td><img src="assets/app_session.jpg" width="160" alt="Session Setup"/></td>
+<td><img src="assets/app_edge.jpg" width="160" alt="Edge Mode 698μs"/></td>
+<td><img src="assets/app_alert.jpg" width="160" alt="OPEN WINDOW Alert"/></td>
+<td><img src="assets/app_cloud.jpg" width="160" alt="Cloud Mode 7ms"/></td>
+</tr>
+<tr>
+<td align="center">Session Setup</td>
+<td align="center">Edge Mode (698μs)</td>
+<td align="center">OPEN WINDOW Alert</td>
+<td align="center">Cloud Mode (7ms)</td>
+</tr>
+</table>
 
-## 🚀 Setup
+---
+
+## Dataset
+
+The complete dataset of 5,317 records is publicly available on Zenodo:
+
+**[DOI: 10.5281/zenodo.19563976](https://doi.org/10.5281/zenodo.19563976)**
+
+| Column | Description |
+|--------|-------------|
+| esp32_processing_us | Edge latency in microseconds |
+| cloud_processing_ms | Cloud latency in milliseconds |
+| mode | `edge` or `cloud` |
+| session_location | MyRoom, Classroom1402, ClassLab1404 |
+| co2 | CO2 in ppm (MH-Z19C) |
+| temp | Temperature °C (DHT22) |
+| hum | Humidity % (DHT22) |
+| air | Air quality analog (MQ-135) |
+| sound | Sound level analog (DFR0034) |
+| iaq_score | Computed IAQ score (alert threshold: 1000) |
+| cloud_iaq_score | Same computation run on Cloud Function |
+| gateway_receive_time | Unix timestamp of BLE receipt on phone |
+
+---
+
+## Deployment Locations
+
+| Location | Type | Room Size | Occupants | Network |
+|----------|------|-----------|-----------|---------|
+| MyRoom | Off-campus apartment, Sokcho | Small | 1 | Residential hotspot |
+| Classroom 1402 | KDU Global lecture room | Medium | 25 | Campus hotspot |
+| Classlab 1404 | KDU Global computer lab | Medium | ~5 | Campus hotspot |
+
+---
+
+## Replication / Getting Started
 
 ### ESP32 Firmware
-1. Open `firmware/ecosense_final/ecosense_final.ino` in Arduino IDE
-2. Board: ESP32 Dev Module
-3. Partition: Huge APP (3 MB No OTA / 1 MB SPIFFS)
-4. Flash Mode: DIO, Frequency: 40 MHz
-5. Hold BOOT button when "Connecting..." appears
+
+**Arduino IDE settings:**
+
+```
+Board:           ESP32 Dev Module
+Partition:       Huge APP
+Flash mode:      DIO
+Flash frequency: 40MHz
+Upload:          Hold BOOT button during upload
+```
+
+**Libraries required:**
+- ArduinoJson
+- Adafruit DHT sensor library
+- ESP32 BLE Arduino (built-in)
+- MHZ19 library
+
+**BLE UUIDs:**
+```
+Device name:  EcoSense_Node_1
+Service UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
+Notify UUID:  beb5483e-36e1-4688-b7f5-ea07361b26a8
+Write UUID:   beb5483e-36e1-4688-b7f5-ea07361b26a9
+```
+
+> **Known hardware pitfall:** Do NOT use GPIO12 for any sensor — it is a strapping pin that prevents boot when pulled HIGH.
+
+Firmware source: [`firmware/ecosense_final/ecosense_final.ino`](firmware/ecosense_final/ecosense_final.ino)
 
 ### Flutter App
-```bash
-cd kdu_monitor
-flutter pub get
-flutter run
-```
-> Note: Requires `google-services.json` (not included — configure your own Firebase project)
 
-### Cloud Function
-```bash
-firebase deploy --only functions
-```
-> Note: Requires Firebase Blaze plan
+**Prerequisites:**
+- Flutter SDK
+- Firebase project (Blaze plan required for Cloud Functions)
+- Android device with BLE support
 
-## ⚠️ Limitations
+**Setup:**
+1. Run `flutterfire configure` in `/kdu_monitor/`
+2. Enable Firebase Realtime Database
+3. Deploy Cloud Function from `/functions/`
+4. Connect via BLE to `EcoSense_Node_1`
 
-- Single ESP32 node (one location at a time)
-- MH-Z19C requires 60 s warmup after power-on
-- MQ-135 uncalibrated — raw analog indicator only
-- DHT22 ±0.5 °C accuracy propagates into IAQ score
-- Dataset small-scale — single university campus
-
-## 📋 Progress
-
-- [x] Hardware wiring and sensor testing
-- [x] Combined firmware with NVS fix
-- [x] BLE GATT server with Edge/Cloud modes
-- [x] Flutter BLE dashboard app
-- [x] Firebase sync with WAL resilience
-- [x] Firebase Cloud Function (IAQ calculation)
-- [x] End-to-end pipeline confirmed working
-- [ ] Formal data collection (in progress)
-- [ ] Research paper writing
-- [ ] TechRxiv/arXiv preprint submission
-
-## 👤 Author
-
-Gyawali Aabhushan | Student ID: 2217133
-Smart Computing F22 | KDU Global, Sokcho, South Korea
-GURP Supervisor: Prof. Mohammed A.A
+App source: [`kdu_monitor/`](kdu_monitor/)
 
 ---
 
-*Solo project — all hardware, firmware, app, and research by one student.*
+## Citation
+
+```bibtex
+@misc{gyawali2026ecosense,
+  author      = {Gyawali Aabhushan},
+  title       = {EcoSense: Edge vs. Cloud Computation Placement for
+                 Real-Time IAQ Monitoring in University Campus Environments},
+  year        = {2026},
+  institution = {Kyungdong University Global},
+  note        = {Preprint}
+}
+
+@dataset{gyawali2026dataset,
+  author    = {Gyawali Aabhushan},
+  title     = {EcoSense IAQ Monitoring Dataset: Edge vs. Cloud Pipeline
+               Latency Across Three Campus Locations},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.19563976},
+  url       = {https://doi.org/10.5281/zenodo.19563976}
+}
+```
 
 ---
 
-## 🔒 Security Note for Contributors
+## Acknowledgements
 
-This repository does not include API keys or Firebase credentials.
-You must provide your own `google-services.json` and configure your own Firebase project.
+This project was conducted under the KDU Global Graduate-Undergraduate Research Program (GURP), Spring 2026, supervised by Professor Mohammed A.A., Department of Smart Computing, Kyungdong University Global.

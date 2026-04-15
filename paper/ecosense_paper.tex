@@ -1,0 +1,933 @@
+%% ============================================================
+%% EcoSense: Edge vs. Cloud Computation Placement for
+%% Real-Time IAQ Monitoring in University Campus Environments
+%% A Pipeline Latency Analysis
+%%
+%% Author: GYAWALI AABHUSHAN
+%% Compile on Overleaf with pdfLaTeX
+%%
+%% REQUIRED IMAGE FILES (upload to Overleaf project root):
+%%   fig_architecture.png
+%%   fig_methodology.png
+%%   fig_boxplot.png
+%%   fig_perloc.png
+%%   fig_cdf.png
+%%   fig_histogram.png
+%%   fig_iaq.png
+%%   hw_full.jpg
+%%   hw_closeup.jpg
+%%   app_session.jpg
+%%   app_edge.jpg
+%%   app_alert.jpg
+%%   app_cloud.jpg
+%% ============================================================
+
+\documentclass[12pt, a4paper]{article}
+
+%% Packages
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm,
+            left=2.8cm, right=2.8cm]{geometry}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{textcomp}
+\usepackage[hidelinks, colorlinks=true,
+            linkcolor=black,
+            citecolor=black,
+            urlcolor=blue!70!black]{hyperref}
+
+%% Typography
+\setstretch{1.2}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+\captionsetup{font=small, labelfont=bf, skip=6pt}
+\setlist{noitemsep, topsep=3pt}
+
+%% Custom commands
+\newcommand{\us}{\,\textmu s}
+\newcommand{\ms}{\,ms}
+
+%% ============================================================
+\begin{document}
+%% ============================================================
+
+%% Title block
+\begin{center}
+  {\LARGE\bfseries EcoSense: Edge vs.\ Cloud Computation Placement
+  for Real-Time IAQ Monitoring\\[4pt]
+  in University Campus Environments}\\[8pt]
+  {\large A Pipeline Latency Analysis}\\[16pt]
+  {\large GYAWALI AABHUSHAN}\\[4pt]
+  {\normalsize Department of Smart Computing,
+  Kyungdong University Global, Goseong-gun, South Korea}\\[2pt]
+  {\normalsize \texttt{aabhushan44@v.kduniv.ac.kr}}\\[4pt]
+  {\normalsize April 2026}
+\end{center}
+
+\vspace{10pt}\hrule\vspace{10pt}
+
+%% Abstract
+\begin{abstract}
+CO\textsubscript{2} concentrations in university classrooms routinely
+exceed thresholds associated with reduced cognitive
+performance, yet most institutional monitoring systems rely on
+cloud-dependent pipelines that assume reliable internet
+connectivity---an assumption that fails in many real campus
+environments. This paper presents EcoSense, a deployed indoor air
+quality (IAQ) monitoring system built on an ESP32 WROOM-32D V4
+microcontroller with CO\textsubscript{2}, temperature, humidity, air
+quality, and sound sensors, connected via Bluetooth Low Energy (BLE)
+to an Android application that writes opportunistically to Firebase
+Realtime Database. Using a balanced A/B methodology---alternating
+30-minute edge and cloud processing phases across three real deployment
+locations in Sokcho, South Korea---we collected 5{,}317 readings and
+compared end-to-end pipeline latency between local ESP32 processing and
+a Firebase Cloud Function. Edge processing achieved a median latency of
+715\us{} (max 897\us, 100\% below 1\ms). The cloud pipeline produced a
+median of 6\ms{} with a 95th percentile of 9\ms{} and occasional spikes
+exceeding 400\ms. A Mann--Whitney $U$ test returned $U = 0$
+($p \approx 0$) with Cliff's $\delta = 1.0$, confirming complete
+stochastic separation across all 5{,}317 measurements. To the best of
+the authors' knowledge, this is the first empirical latency benchmark
+comparing ESP32-local processing against a serverless cloud function
+pipeline in a real university classroom IAQ deployment context. The
+dataset is publicly available
+at~\url{https://doi.org/10.5281/zenodo.19563976}.
+\end{abstract}
+
+\textbf{Keywords:} edge computing; indoor air quality; ESP32; BLE;
+Firebase; pipeline latency; CO\textsubscript{2} monitoring; IoT
+
+\hrule\vspace{14pt}
+
+%% ============================================================
+\section{Introduction}
+%% ============================================================
+
+\subsection{Background}
+
+Classrooms are occupied spaces where CO\textsubscript{2} accumulates
+rapidly. Studies measuring air quality in school buildings have
+consistently documented concentrations exceeding 1{,}000\,ppm during
+occupied periods---a threshold widely used in building standards as an
+indicator of inadequate ventilation~\cite{fresh2013,almeida2017}.
+Research by Allen et al.~\cite{allen2016} established a direct link
+between elevated CO\textsubscript{2} and reduced cognitive performance
+across nine functional domains, with scores declining measurably at
+concentrations comparable to those found in poorly ventilated
+classrooms. The implication for university environments is practical:
+students in rooms that would trigger a ventilation alert are likely
+performing below their potential without any indication that air
+quality is the cause.
+
+The technical response is continuous real-time monitoring with
+automated alerts. IoT-based sensor systems can measure
+CO\textsubscript{2} continuously and trigger notifications when
+thresholds are breached. The implementation challenge, however, is
+architectural: cloud-dependent pipelines introduce round-trip latency
+and a connectivity dependency that are not always acceptable. In campus
+environments where WiFi coverage is absent or unreliable during class
+hours---which is common in smaller institutions---a cloud-first design
+can fail silently: the system appears operational but alerts are
+delayed or never delivered.
+
+This project originated from exactly that constraint. The original
+design used an MQTT broker (HiveMQ Cloud) over campus WiFi. Stable
+WiFi was unavailable in the target classroom during class hours,
+forcing a complete architectural redesign to BLE-primary communication
+with opportunistic Firebase sync over a mobile hotspot. This made the
+latency question practically important: if the system was computing
+IAQ alerts locally anyway, how much faster was local processing than
+the cloud pipeline, and was the difference large enough to matter for
+real-time alerting?
+
+\subsection{Motivation}
+
+Edge computing in IoT systems has been thoroughly motivated in the
+literature~\cite{shi2016,satya2017}. Shi et al.~\cite{shi2016}
+identify response time, bandwidth, and reliability as the primary
+drivers for pushing computation to the network edge. Satyanarayanan
+\cite{satya2017} argues that edge infrastructure is necessary for
+applications where cloud round-trip times are incompatible with
+real-time response requirements.
+
+What is less well studied is the quantification of these advantages on
+microcontroller-class edge hardware---specifically the ESP32, which
+operates in a fundamentally different performance envelope from the
+Raspberry Pi or NVIDIA Jetson devices that dominate existing edge
+benchmarking literature. Chang et al.~\cite{chang2025} demonstrate
+that ESP32-based edge servers reduce latency compared to cloud
+processing for object detection workloads, confirming that ESP32-class
+devices can perform meaningful computation faster than a cloud function
+pipeline. The MQTT latency literature provides useful baseline context:
+Wang~\cite{wang2021} measured MQTT publish latency on both Linux-based
+platforms and bare-metal embedded systems, finding that remote broker
+latency consistently exceeds local processing time. Ko and
+Lee~\cite{ko2025} report MQTT-based IoT sensor architectures achieving
+approximately 150\ms{} average latency under normal conditions.
+
+The gap this study addresses is specific: ESP32 edge versus Firebase
+serverless function latency, measured under real classroom deployment
+conditions across multiple room types.
+
+\subsection{Research Question and Contributions}
+
+\begin{quote}
+\textit{Does local edge processing produce lower end-to-end pipeline
+latency than cloud offloading for real-time IAQ monitoring under
+real-world campus network conditions?}
+\end{quote}
+
+The concrete contributions of this work are: (1)~a deployed and
+validated ESP32 + BLE + Flutter + Firebase IAQ monitoring system;
+(2)~a balanced dataset of 5{,}317 readings across three real campus
+environments, publicly available at~\cite{dataset2026};
+(3)~an empirical latency benchmark comparing ESP32-local edge
+processing against a Firebase Cloud Function pipeline for classroom
+IAQ; and (4)~a replicable A/B data collection methodology using a BLE
+MODE\_ACK handshake for clean phase separation.
+
+%% ============================================================
+\section{Related Work}
+%% ============================================================
+
+\subsection{Edge Computing on Constrained Hardware}
+
+Shi et al.~\cite{shi2016} define edge computing as pushing computation
+to the network edge and identify latency, bandwidth, and reliability as
+the primary drivers. Satyanarayanan~\cite{satya2017} extends this,
+arguing that edge infrastructure is necessary when cloud round-trip
+times are incompatible with real-time applications. Chang et
+al.~\cite{chang2025} deploy an ESP32-based edge server for object
+detection and demonstrate measurable latency reductions compared to
+cloud processing, confirming that ESP32-class devices can perform
+meaningful inference faster than a cloud function pipeline.
+Wang~\cite{wang2021} measured MQTT publish latency on bare-metal
+embedded systems and Linux platforms, finding remote broker latency
+consistently exceeds local processing time. Ko and Lee~\cite{ko2025}
+report that MQTT-based sensor architectures achieve approximately
+150\ms{} average latency at low node counts, increasing beyond 200\ms{}
+as node count grows. These figures contextualize the cloud pipeline
+latency observed in this study (median 6\ms), which is lower than
+typical MQTT pipelines because the Firebase WebSocket push model avoids
+broker round-trip overhead.
+
+What the literature does not provide is an ESP32-specific comparison
+of local processing against a serverless cloud function in a real
+classroom IAQ deployment---the specific gap this study addresses.
+
+\subsection{IAQ in Educational Environments}
+
+Allen et al.~\cite{allen2016} demonstrated that CO\textsubscript{2}
+concentrations above approximately 900\,ppm were independently
+associated with significantly lower cognitive function scores across
+nine domains. This provides direct experimental support for the urgency
+of real-time CO\textsubscript{2} monitoring in occupied rooms. The
+FRESH study~\cite{fresh2013} measured CO\textsubscript{2} in 18
+classrooms across 17 Dutch schools and found ventilation rates
+routinely below building standards during occupied periods, with a
+targeted mechanical ventilation intervention producing measurable
+reductions. Arya et al.~\cite{arya2024} identify inconsistency across
+OECD countries in how CO\textsubscript{2} thresholds are defined in
+educational settings, with most jurisdictions relying on periodic spot
+checks rather than continuous monitoring. Almeida et
+al.~\cite{almeida2017} found that occupant-driven window opening was
+triggered by thermal discomfort rather than air quality, with
+CO\textsubscript{2} frequently remaining above threshold for extended
+periods before ventilation was initiated.
+
+\subsection{IoT-Based IAQ Monitoring Systems}
+
+Khan et al.~\cite{khan2022} built an ESP-MESH network across a college
+campus using ESP32 nodes with CO\textsubscript{2} and air quality
+sensors, demonstrating that multi-node IAQ monitoring is feasible with
+consumer hardware. Their system required WiFi connectivity for data
+aggregation---unavailable in the target environment of this study.
+Maier et al.~\cite{maier2017} confirmed the ESP32's suitability for
+sensor-based IoT applications in terms of processing speed and
+connectivity options. The specific combination of ESP32 BLE GATT
+server, Flutter mobile client, and Firebase Cloud Function backend has
+not been benchmarked for pipeline latency in a classroom IAQ context
+in prior published literature.
+
+%% ============================================================
+\section{System Design and Methodology}
+%% ============================================================
+
+\subsection{System Architecture}
+
+Figure~\ref{fig:arch} shows the full EcoSense pipeline. The ESP32
+WROOM-32D V4 reads from four sensors, computes an IAQ score locally,
+timestamps the entire payload build using \texttt{micros()}, and
+advertises the result over BLE as a GATT notification. The Flutter
+Android app receives the notification, records the gateway timestamp,
+and writes the reading to Firebase Realtime Database at
+\texttt{/readings/EcoSense\_Node\_1/\{id\}}~\cite{firebase2024}. A
+Firebase Cloud Function triggers on each new write, runs the same IAQ
+computation, and writes the result back. The
+\texttt{cloud\_processing\_ms} field---from Flutter initiating the
+write to the Cloud Function completing its write-back---is the cloud
+latency measurement.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\linewidth]{fig_architecture.png}
+  \caption{EcoSense system architecture: full pipeline from sensor
+           to cloud.}
+  \label{fig:arch}
+\end{figure}
+
+Firebase sync operates over the researcher's mobile hotspot rather
+than campus WiFi. This represents a best-case scenario for the cloud
+pipeline: under campus WiFi or weaker mobile coverage, cloud latency
+would be higher, strengthening the edge advantage further. The 6\ms{}
+cloud median should therefore be understood as a conservative lower
+bound for the Firebase pipeline in this deployment environment.
+
+\textbf{Latency measurement scope.} Edge latency captures the time
+from JSON payload construction start to IAQ computation completion on
+the ESP32, measured in microseconds via \texttt{micros()}. BLE
+transmission time (ESP32 to phone) is excluded from \emph{both}
+pipeline measurements because it is approximately constant and equal
+across both modes---the phone receives data via BLE in both cases.
+Excluding a constant from both sides does not affect the comparison.
+Similarly, the Flutter gateway's processing time between BLE receipt
+and Firebase write dispatch is constant and equal across both modes,
+as the same Dart event loop handles both pipelines; it is therefore
+excluded from both measurements by the same logic.
+
+\subsection{A/B Measurement Methodology}
+
+Figure~\ref{fig:meth} illustrates the data collection methodology.
+Each session consisted of a 30-minute edge phase followed by a
+30-minute cloud phase. Mode switching is controlled by a BLE
+MODE\_ACK handshake: the Flutter app sends \texttt{CMD:EDGE} or
+\texttt{CMD:CLOUD} to the ESP32 over a Write characteristic; the
+firmware pauses for three seconds and resumes only after an explicit
+ACK. This ensures clean phase separation in the dataset.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\linewidth]{fig_methodology.png}
+  \caption{A/B measurement methodology: 30-minute alternating phases
+           with MODE\_ACK handshake for clean phase separation.}
+  \label{fig:meth}
+\end{figure}
+
+Edge phase always ran first because the MH-Z19C CO\textsubscript{2}
+sensor requires approximately three minutes of warm-up time after
+power-on. A \texttt{buffer\_ready} flag suppresses the first five
+readings of each session regardless of mode.
+
+\textbf{Methodological artifact.} Because edge runs first and cloud
+runs second within each session, CO\textsubscript{2} is generally
+higher during the cloud phase due to natural accumulation in an
+occupied space. This affects IAQ scores per phase but does not affect
+latency measurements. Crucially, the latency measurements
+(\texttt{esp32\_processing\_us} and \texttt{cloud\_processing\_ms})
+are computed from the payload contents, not from the
+CO\textsubscript{2} value itself---the arithmetic complexity of the
+IAQ workload is $\mathcal{O}(1)$ regardless of sensor readings, so
+the sequential artifact has zero mathematical effect on the latency
+comparison. IAQ timeseries data is reported descriptively and
+separately from the latency analysis.
+
+An initial Phase~1 data collection session produced $n = 670$ edge
+and $n = 2{,}507$ cloud readings---a severely unbalanced split caused
+by the MODE\_ACK handshake not being enforced in the early firmware
+version. All Phase~1 data was deleted before any analysis was
+performed, and the balanced methodology was validated on a test session
+before the three production sessions were conducted.
+
+\subsection{Hardware Implementation}
+
+Figure~\ref{fig:hw} shows the physical deployment. The ESP32
+WROOM-32D V4 is mounted on an MB-102 breadboard connected to four
+sensors via jumper wires. GPIO assignments: DHT22 on GPIO26
+(temperature and humidity), MH-Z19C on UART TX=GPIO14/RX=GPIO13
+(CO\textsubscript{2} in ppm), MQ-135 on GPIO32 (analog air quality),
+and DFR0034 on GPIO33 (analog sound). The MH-Z19C requires 5\,V and
+connects to the VIN rail; all other sensors use 3.3\,V.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.46\linewidth}
+    \includegraphics[width=\linewidth]{hw_full.jpg}
+    \caption{Full deployment setup}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.46\linewidth}
+    \includegraphics[width=\linewidth]{hw_closeup.jpg}
+    \caption{ESP32 and breadboard detail}
+  \end{subfigure}
+  \caption{Physical hardware: ESP32 WROOM-32D V4 on MB-102 breadboard
+           with all four sensors connected.}
+  \label{fig:hw}
+\end{figure}
+
+\subsubsection{Implementation Challenges and Resolutions}
+
+Several hardware and software problems were encountered and resolved
+during development.
+
+\begin{itemize}
+
+\item \textbf{GPIO12 strapping pin boot loop.} Connecting the
+MH-Z19C RX line to GPIO12 caused an infinite reset loop. GPIO12 is
+sampled at startup to set the ESP32 flash voltage; pulling it HIGH
+prevents boot~\cite{esp32trm2023}. Resolution: moved to GPIO13.
+
+\item \textbf{Flash configuration mismatch.} The Huge APP partition
+scheme required three simultaneous settings: Huge APP partition, DIO
+flash mode, and 40\,MHz flash frequency. Changing any one without the
+others produced silent BLE notification failure.
+
+\item \textbf{NVS initialization error.} After a full flash erase,
+NVS errors appeared at startup. Fix: \texttt{nvs\_flash\_init()} must
+be the first call in \texttt{setup()}, before any BLE or sensor
+initialization~\cite{esp32trm2023}.
+
+\item \textbf{Cloud Function infinite trigger loop.} The Firebase
+Cloud Function triggered on its own result write-back. Fix: guard
+condition \texttt{event.data.before.exists()}---if the document
+already existed, return null immediately~\cite{firebase2024}.
+
+\item \textbf{MH-Z19C autocalibration drift.} The sensor's
+autocalibration assumes periodic exposure to outdoor air (400\,ppm),
+causing drift in poorly ventilated rooms. Disabled with
+\texttt{autoCalibration(false)}.
+
+\item \textbf{Power supply.} Combined sensor current draw approaches
+the 500\,mA USB limit. Intermittent sensor dropouts occurred via
+laptop USB. Wall charger used for all production sessions.
+
+\end{itemize}
+
+\subsection{Firmware Design}
+
+The ESP32 operates as a BLE GATT server advertising as
+\texttt{EcoSense\_Node\_1}. Each sensor reading cycle constructs a
+JSON payload using ArduinoJson, with the entire build wrapped in
+\texttt{micros()} calls to produce \texttt{esp32\_processing\_us}.
+The IAQ algorithm computes a five-point moving average of the
+CO\textsubscript{2} reading with temperature compensation; readings
+with \texttt{iaq\_score > 1000} set the alert field to
+\texttt{OPEN\_WINDOW}.
+
+\subsection{Mobile Application}
+
+Figure~\ref{fig:app} shows the Flutter Android application during
+data collection at Classroom~1402. Before each session, the operator
+enters the location label, room size, and occupant count. Network type
+is auto-detected via \texttt{connectivity\_plus} and written into
+every Firebase record. The app includes a 30-minute countdown timer,
+a packet counter (target: 900 per phase), a 60-second stall detector,
+and a wakelock to prevent screen sleep during sessions.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.23\linewidth}
+    \includegraphics[width=\linewidth]{app_session.jpg}
+    \caption{Session setup}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.23\linewidth}
+    \includegraphics[width=\linewidth]{app_edge.jpg}
+    \caption{Edge mode (698\us)}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.23\linewidth}
+    \includegraphics[width=\linewidth]{app_alert.jpg}
+    \caption{OPEN WINDOW alert}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.23\linewidth}
+    \includegraphics[width=\linewidth]{app_cloud.jpg}
+    \caption{Cloud mode (7\ms)}
+  \end{subfigure}
+  \caption{EcoSense application at Classroom~1402.
+  (a)~Session setup: classroom label, 25 occupants, WiFi detected.
+  (b)~Edge mode live dashboard: 698\us{} latency, 5/900 packets,
+  WAL 0 pending.
+  (c)~OPEN WINDOW alert at CO\textsubscript{2} 1{,}138\,ppm,
+  IAQ~1{,}133.5, edge processing 726\us.
+  (d)~Cloud mode: 7\ms{} cloud processing, 13 readings in Firebase.}
+  \label{fig:app}
+\end{figure}
+
+\subsection{Data Collection Sessions}
+
+Three sessions were conducted across:
+\begin{itemize}
+  \item \textbf{MyRoom:} off-campus apartment, Sokcho; residential
+  mobile hotspot; room size: small; 1 occupant.
+  \item \textbf{Classroom~1402:} KDU Global lecture classroom; campus
+  mobile hotspot; room size: medium; 25 occupants.
+  \item \textbf{Classlab~1404:} KDU Global computer laboratory; campus
+  mobile hotspot; room size: medium; computer workstations present.
+\end{itemize}
+
+\subsection{Statistical Analysis}
+
+The Mann--Whitney $U$ test~\cite{mann1947} was selected because the
+cloud latency distribution is heavily right-skewed (median 6\ms,
+max $> 400$\ms), violating the normality assumption required for a
+parametric $t$-test. The research question is also fundamentally
+ordinal---is each edge reading faster than each cloud reading?---making
+Mann--Whitney $U$ the appropriate test. Effect size was quantified
+using Cliff's $\delta$~\cite{cliff1993}, measuring the probability
+that a randomly selected edge reading is faster than a randomly
+selected cloud reading.
+
+\subsection{Threats to Validity}
+
+The cloud latency measurements were made over a mobile hotspot,
+representing a lower bound for cloud latency in this deployment
+context. The dataset uses a single ESP32 node deployed sequentially,
+so cross-location IAQ comparisons are not controlled. The MQ-135
+sensor lacks calibrated burn-in (24--48\,h required); its readings are
+treated as indicative. BLE range of approximately 10\,m limits
+deployment flexibility in large lecture halls. Finally, this study
+uses a single BLE node; in a multi-node deployment, simultaneous BLE
+broadcasts from multiple ESP32 devices could introduce time-division
+multiplexing contention, potentially increasing edge latency variance,
+and this effect is not captured in the current dataset.
+
+%% ============================================================
+\section{Results and Discussion}
+%% ============================================================
+
+\subsection{Dataset Overview}
+
+The complete dataset comprises 5{,}317 records: 2{,}632 edge and
+2{,}685 cloud readings, with 1{,}757--1{,}787 records per location.
+
+\subsection{Overall Latency Comparison}
+
+Figure~\ref{fig:boxplot} shows the overall edge vs.\ cloud latency
+distributions.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.80\linewidth]{fig_boxplot.png}
+  \caption{Edge vs.\ cloud processing latency---all sessions combined
+           (log scale). Annotation: $U=0$, $p \approx 0$,
+           Cliff's $\delta = 1.0$.}
+  \label{fig:boxplot}
+\end{figure}
+
+Edge processing achieved a median of 715\us{} and a mean of
+715.4\us, with $\sigma = 26.1$\us. The range was 676--897\us; every
+edge reading completed in under 1\ms. The cloud pipeline produced a
+median of 6\ms{} and a mean of 7.7\ms, with $\sigma = 19.8$\ms. The
+95th percentile was 9\ms, the 99th percentile was 13.2\ms, and the
+maximum exceeded 400\ms.
+
+Mann--Whitney $U = 0$, $p \approx 0$, Cliff's $\delta = 1.0$
+(large effect)~\cite{cliff1993}. Every single edge reading was faster
+than every single cloud reading, without exception across all 5{,}317
+measurements. The maximum edge latency (897\us{} = 0.897\ms) was below
+the minimum observed cloud latency (1\ms): the two distributions do
+not overlap at any point, constituting complete stochastic separation.
+
+Figure~\ref{fig:cdf} shows the cumulative distribution functions,
+and Figure~\ref{fig:hist} shows the cloud latency distribution in
+isolation.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.80\linewidth]{fig_cdf.png}
+  \caption{CDF of edge vs.\ cloud latency. 100\% of edge readings
+           complete below the 1\ms{} threshold; the cloud CDF has not
+           departed from 0 at that point.}
+  \label{fig:cdf}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.80\linewidth]{fig_histogram.png}
+  \caption{Cloud latency distribution (readings above 50\ms{} excluded
+           for readability). Approximately 95\% fall below 10\ms;
+           the right tail extends to over 400\ms.}
+  \label{fig:hist}
+\end{figure}
+
+The right tail is the practically important feature. A P99 of
+13.2\ms{} and spikes exceeding 400\ms{} mean that in rare but real
+cases, an alert is delayed by nearly half a second. The edge pipeline
+has no such tail: its range of 676--897\us{} is bounded by the
+ESP32's processing speed for a fixed workload, which is deterministic.
+
+\textbf{Comparison with prior work.} Wang~\cite{wang2021} found remote
+MQTT broker latency consistently exceeds local processing on bare-metal
+embedded systems. Ko and Lee~\cite{ko2025} report approximately
+150\ms{} average latency for MQTT-based IoT sensor pipelines. The
+cloud pipeline in this study (median 6\ms) outperforms these MQTT
+baselines because Firebase's WebSocket push model avoids broker
+round-trip overhead. Nevertheless, the edge pipeline (median 0.715\ms)
+is approximately $8.4\times$ faster than the cloud pipeline measured
+here, and approximately $200\times$ faster than the MQTT baselines in
+the literature. It should be noted that this MQTT comparison is
+architecturally asymmetric: Firebase uses a WebSocket push model that
+avoids broker round-trip overhead, so part of the latency advantage
+over MQTT is protocol-structural rather than purely network-derived.
+A direct comparison against a local MQTT broker on the same cellular
+path remains future work.
+
+\subsection{Per-Location Analysis}
+
+Table~\ref{tab:stats} summarises latency statistics by location.
+
+\begin{table}[H]
+\centering
+\caption{Latency statistics by session location.}
+\label{tab:stats}
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+\multirow{2}{*}{\textbf{Location}}
+  & \multicolumn{4}{c}{\textbf{Edge (\textmu s)}}
+  & \multicolumn{4}{c}{\textbf{Cloud (ms)}} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+  & $n$ & Mean & Med. & $\sigma$
+  & $n$ & Mean & Med. & P95 \\
+\midrule
+MyRoom         & 883 & 717.2 & 719 & 29.2 & 890 & 8.8 & 8 & 9.0 \\
+Classroom 1402 & 875 & 711.6 & 714 & 26.4 & 912 & 7.0 & 6 & 8.0 \\
+Classlab 1404  & 874 & 717.3 & 722 & 21.6 & 883 & 7.2 & 6 & 7.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:perloc} shows the per-location distributions.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.88\linewidth]{fig_perloc.png}
+  \caption{Latency by location. Left: edge latency is
+           location-invariant (medians span only 8\us{} across three
+           locations). Right: cloud latency varies slightly with
+           network path.}
+  \label{fig:perloc}
+\end{figure}
+
+Edge medians of 719\us{} (MyRoom), 714\us{} (Classroom~1402), and
+722\us{} (Classlab~1404) span just 8\us. Edge latency is determined
+by the ESP32's processing speed for a fixed computational task---the
+sensor values change across locations but the time taken to serialise
+the JSON payload and compute the IAQ score does not vary meaningfully.
+
+Cloud latency shows slightly more variation. MyRoom produced a cloud
+median of 8\ms{} while both campus locations produced 6\ms. This is
+likely attributable to Firebase routing: campus mobile data may have
+reached a geographically closer Firebase server region, or the
+residential connection had slightly higher base latency. The difference
+illustrates that cloud latency is sensitive to network path in ways
+that edge latency is not.
+
+\subsection{IAQ Observations}
+
+Figure~\ref{fig:iaq} shows IAQ score timeseries for all three
+locations, with edge and cloud phases separated.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.88\linewidth]{fig_iaq.png}
+  \caption{IAQ score over time by location. Green: edge phase.
+           Orange: cloud phase. Dashed line: alert threshold
+           (1{,}000). The IAQ offset between phases reflects
+           natural CO\textsubscript{2} accumulation over the
+           session; this is a methodological artifact of sequential
+           collection (Section~3.2) and does not affect the latency
+           comparison.}
+  \label{fig:iaq}
+\end{figure}
+
+\textbf{MyRoom} tracked between 1{,}400 and 1{,}600 IAQ throughout,
+well above the alert threshold. The sharp decline at session end
+corresponds to a window being opened; the OPEN\_WINDOW alert was
+active throughout, which is the correct response for a closed room
+with one occupant.
+
+\textbf{Classroom~1402} shows a markedly different pattern. The edge
+phase (before full occupancy) started around 800 IAQ, below the alert
+threshold. CO\textsubscript{2} accumulated steadily, and the cloud
+phase tracked consistently above the edge phase after 30 more minutes
+of occupancy. The 1{,}000 threshold was breached near the session end.
+In a live deployment the OPEN\_WINDOW alert would have triggered
+approximately 25--30 minutes into the session---a realistic and useful
+alert for 25 occupants.
+
+\textbf{Classlab~1404} tracked well above 1{,}000 throughout both
+phases, with the cloud phase exceeding 1{,}800--2{,}000 IAQ. Multiple
+high-heat workstations and limited natural ventilation kept the IAQ
+score elevated even with few occupants. The alert was active at every
+measurement point.
+
+\subsection{Discussion}
+
+The result---$U = 0$, Cliff's $\delta = 1.0$, complete separation
+across 5{,}317 measurements---is unambiguous. Edge processing is
+approximately $8.4\times$ faster than cloud offloading at the median
+and provides fundamentally greater predictability.
+
+The practical significance depends on application domain. A median
+cloud latency of 6\ms{} is imperceptible to a human observer. But the
+right tail matters for alerting systems: a P99 of 13.2\ms{} and
+occasional spikes exceeding 400\ms{} mean that in rare but real cases,
+an alert is delayed by nearly half a second. For CO\textsubscript{2}
+monitoring in a classroom this is probably tolerable. For more acute
+hazard detection---gas leaks, fire sensors---the deterministic
+sub-millisecond response of the edge pipeline would matter more
+critically.
+
+The architectural pivot forced by the absence of campus WiFi turned
+out to be the most important outcome of the project. The original
+MQTT-over-WiFi design would have functioned under controlled conditions
+but would have failed in the actual deployment environment. The
+BLE-first redesign operates reliably in the exact environment it was
+built for, and the connectivity constraint became the core research
+contribution rather than a limitation.
+
+One finding that was not anticipated is the tight bounding of edge
+latency. The 221\us{} range across 2{,}632 readings indicates highly
+deterministic processing on the ESP32 for this workload. The
+ArduinoJson serialization step dominates processing time and is the
+primary source of the 26.1\us{} standard deviation. This
+predictability is a genuine design advantage: an edge-processed alert
+fires within a known time window, every time, regardless of network
+conditions.
+
+%% ============================================================
+\section{Conclusion}
+%% ============================================================
+
+This study deployed EcoSense across three real locations and measured
+end-to-end pipeline latency of local ESP32 edge processing against a
+Firebase Cloud Function. Across 5{,}317 balanced readings, edge
+processing achieved a median of 715\us{} (max 897\us); the cloud
+pipeline produced a median of 6\ms{} (P95 = 9\ms, max $> 400$\ms).
+Mann--Whitney $U = 0$ and Cliff's $\delta = 1.0$ confirm complete
+stochastic separation. Edge latency was invariant across locations;
+cloud latency varied with network path. Real IAQ threshold breaches
+were captured in the classroom and computer lab, confirming the
+system's ability to detect genuine ventilation events in deployed
+conditions.
+
+\textbf{Limitations.} Cloud measurements were made over a mobile
+hotspot (lower bound for cloud latency). A single node was deployed
+sequentially, so cross-location IAQ comparisons are not controlled.
+The MQ-135 lacks burn-in calibration. BLE range limits deployment
+flexibility. The MQTT latency comparison is architecturally
+asymmetric; a direct same-path MQTT baseline is left for future work.
+
+\textbf{Future work} includes multi-node simultaneous deployment;
+SPIFFS offline buffering for unattended operation; LoRa radio for
+wider campus coverage; a direct comparison against a local MQTT broker
+on the same cellular path to isolate the Firebase-specific contribution
+to cloud latency; multi-node BLE interference characterisation; and a
+longitudinal CO\textsubscript{2} study across full academic weeks.
+
+%% ============================================================
+\section*{Acknowledgements}
+%% ============================================================
+
+The author thanks Professor Mohammed A.A.\ (Kyungdong University
+Global) for guidance throughout this project and for approving the
+research direction, and KDU Global for permitting access to
+Classroom~1402 and Classlab~1404 for data collection.
+
+The author acknowledges the use of AI-assisted tools for grammar
+checking and manuscript editing. All research, data collection,
+analysis, experimental design, and intellectual content are the work
+of the author, who takes full responsibility for the final content.
+
+%% ============================================================
+\section*{Data Availability}
+%% ============================================================
+
+The complete dataset of 5{,}317 IAQ and latency records is openly
+available at:
+\begin{center}
+\url{https://doi.org/10.5281/zenodo.19563976}
+\end{center}
+The dataset includes all sensor readings, edge and cloud latency
+measurements, session metadata, and IAQ scores for all three
+deployment locations.
+
+%% ============================================================
+\begin{thebibliography}{99}
+%% ============================================================
+
+\bibitem{shi2016}
+W.~Shi, J.~Cao, Q.~Zhang, Y.~Li, and L.~Xu,
+``Edge computing: Vision and challenges,''
+\textit{IEEE Internet Things J.}, vol.~3, no.~5,
+pp.~637--646, Oct.~2016.
+doi:~\href{https://doi.org/10.1109/JIOT.2016.2579198}
+{10.1109/JIOT.2016.2579198}
+
+\bibitem{satya2017}
+M.~Satyanarayanan,
+``The emergence of edge computing,''
+\textit{Computer}, vol.~50, no.~1,
+pp.~30--39, Jan.~2017.
+doi:~\href{https://doi.org/10.1109/MC.2017.9}{10.1109/MC.2017.9}
+
+\bibitem{fresh2013}
+J.~T.~M.~Rosbach, M.~Vonk, F.~Duijm, J.~T.~van~Ginkel,
+U.~Gehring, and B.~Brunekreef,
+``A ventilation intervention study in classrooms to improve indoor
+air quality: the FRESH study,''
+\textit{Environ.\ Health}, vol.~12, p.~110, Dec.~2013.
+doi:~\href{https://doi.org/10.1186/1476-069X-12-110}
+{10.1186/1476-069X-12-110}
+
+\bibitem{arya2024}
+V.~K.~Arya, E.~O.~Rasheed, D.~A.~S.~Samarasinghe, and S.~Wilkinson,
+``Comparative analysis of indoor air quality and thermal comfort
+standards in school buildings across New Zealand with other OECD
+countries,''
+\textit{Buildings}, vol.~14, no.~6, p.~1556, May~2024.
+doi:~\href{https://doi.org/10.3390/buildings14061556}
+{10.3390/buildings14061556}
+
+\bibitem{almeida2017}
+R.~M.~S.~F.~Almeida, M.~Pinto, P.~G.~Pinho, and L.~T.~de~Lemos,
+``Natural ventilation and indoor air quality in educational buildings:
+experimental assessment and improvement strategies,''
+\textit{Energy Effic.}, vol.~10, no.~4,
+pp.~839--854, Aug.~2017.
+doi:~\href{https://doi.org/10.1007/s12053-016-9485-0}
+{10.1007/s12053-016-9485-0}
+
+\bibitem{esp32trm2023}
+Espressif Systems,
+``{ESP32 Technical Reference Manual},''
+Espressif Systems, Shanghai, China, 2023.
+[Online]. Available:
+\url{https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf}
+
+\bibitem{firebase2024}
+Google LLC,
+``{Firebase Realtime Database Documentation},''
+2024 (accessed Apr.~2026).
+[Online]. Available: \url{https://firebase.google.com/docs/database}
+
+\bibitem{allen2016}
+J.~G.~Allen, P.~MacNaughton, U.~Satish, S.~Santanam,
+J.~Vallarino, and J.~D.~Spengler,
+``Associations of cognitive function scores with carbon dioxide,
+ventilation, and volatile organic compound exposures in office workers:
+a controlled exposure study of green and conventional office
+environments,''
+\textit{Environ.\ Health Perspect.}, vol.~124, no.~6,
+pp.~805--812, Jun.~2016.
+doi:~\href{https://doi.org/10.1289/ehp.1510037}{10.1289/ehp.1510037}
+
+\bibitem{khan2022}
+A.~U.~Khan, M.~E.~Khan, M.~Hasan, W.~Zakri, W.~Alhazmi,
+and T.~Islam,
+``An efficient wireless sensor network based on the ESP-MESH protocol
+for indoor and outdoor air quality monitoring,''
+\textit{Sustainability}, vol.~14, no.~24, p.~16630, Dec.~2022.
+doi:~\href{https://doi.org/10.3390/su142416630}
+{10.3390/su142416630}
+
+\bibitem{chang2025}
+Y.-H.~Chang, F.-C.~Wu, and H.-W.~Lin,
+``Design and implementation of ESP32-based edge computing for
+object detection,''
+\textit{Sensors}, vol.~25, no.~6, p.~1656, Mar.~2025.
+doi:~\href{https://doi.org/10.3390/s25061656}{10.3390/s25061656}
+
+\bibitem{wang2021}
+G.~Wang,
+``The study of IoT MQTT publish latency,''
+in \textit{Proc.\ 2021 IEEE Int.\ Conf.\ Electro/Information
+Technology (EIT)}, 2021, doc.~no.~9491838.
+
+\bibitem{ko2025}
+K.~I.~Ko and M.~H.~Lee,
+``MQTT-based architecture for real-time data collection and anomaly
+detection in smart livestock housing,''
+\textit{Sensors}, vol.~25, no.~23, p.~7186, Nov.~2025.
+doi:~\href{https://doi.org/10.3390/s25237186}{10.3390/s25237186}
+
+\bibitem{cliff1993}
+N.~Cliff,
+``Dominance statistics: Ordinal analyses to answer ordinal questions,''
+\textit{Psychol.\ Bull.}, vol.~114, no.~3, pp.~494--509, 1993.
+doi:~\href{https://doi.org/10.1037/0033-2909.114.3.494}
+{10.1037/0033-2909.114.3.494}
+
+\bibitem{mann1947}
+H.~B.~Mann and D.~R.~Whitney,
+``On a test of whether one of two random variables is stochastically
+larger than the other,''
+\textit{Ann.\ Math.\ Stat.}, vol.~18, no.~1,
+pp.~50--60, Mar.~1947.
+doi:~\href{https://doi.org/10.1214/aoms/1177730491}
+{10.1214/aoms/1177730491}
+
+\bibitem{maier2017}
+A.~Maier, A.~Sharp, and Y.~Vagapov,
+``Comparative analysis and practical implementation of the ESP32
+microcontroller module for the internet of things,''
+in \textit{Proc.\ 7th Int.\ Conf.\ Internet Technol.\ Appl.\ (ITA)},
+Wrexham, UK, 2017, pp.~143--148.
+doi:~\href{https://doi.org/10.1109/ITECHA.2017.8101926}
+{10.1109/ITECHA.2017.8101926}
+
+\bibitem{dataset2026}
+Gyawali Aabhushan,
+``{EcoSense IAQ Monitoring Dataset: Edge vs.\ Cloud Pipeline Latency
+Across Three Campus Locations},''
+Zenodo, 2026.
+doi:~\href{https://doi.org/10.5281/zenodo.19563976}
+{10.5281/zenodo.19563976}
+
+\end{thebibliography}
+
+%% ============================================================
+\appendix
+\section{Dataset Summary}
+%% ============================================================
+
+\begin{table}[H]
+\centering
+\caption{EcoSense dataset summary---all three sessions combined.}
+\label{tab:appendix}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Notes} \\
+\midrule
+Total records         & 5{,}317   & Firebase RTDB export \\
+Edge records          & 2{,}632   & All sessions combined \\
+Cloud records         & 2{,}685   & Balanced to within $\pm$2\% \\
+Sessions              & 3         & MyRoom, Classroom~1402, Classlab~1404 \\
+Edge median           & 715\us    & Across all locations \\
+Edge max              & 897\us    & 100\% below 1\ms \\
+Cloud median          & 6\ms      & All locations combined \\
+Cloud P95             & 9\ms      & \\
+Cloud P99             & 13.2\ms   & \\
+Mann--Whitney $U$     & 0         & $p \approx 0$ \\
+Cliff's $\delta$      & 1.0       & Large effect, complete separation \\
+Complete separation   & Yes       & Max edge (0.897\ms) $<$ min cloud (1\ms) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
